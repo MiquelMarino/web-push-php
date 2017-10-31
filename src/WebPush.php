@@ -12,9 +12,9 @@
 namespace Minishlink\WebPush;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise;
+use GuzzleHttp\Psr7\Response;
 
 class WebPush
 {
@@ -161,39 +161,22 @@ class WebPush
             $results = Promise\settle($promises)->wait();
 
             foreach ($results as $result) {
-                if ($result['state'] === "rejected") {
-                    /** @var RequestException $reason **/
-                    $reason = $result['reason'];
+                /** @var  Response $response */
+                $response = $result['value'];
+                $return[] = array(
+                    'content' => $response->getBody()->getContents(),
+                    'statusCode' => $response->getStatusCode(),
+                    'reasonPhrase' => $response->getReasonPhrase()
+                );
 
-                    $error = array(
-                        'success' => false,
-                        'endpoint' => "".$reason->getRequest()->getUri(),
-                        'message' => $reason->getMessage(),
-                    );
-
-                    $response = $reason->getResponse();
-                    if ($response !== null) {
-                        $statusCode = $response->getStatusCode();
-                        $error['statusCode'] = $statusCode;
-                        $error['expired'] = in_array($statusCode, array(404, 410));
-                        $error['content'] = $response->getBody();
-                        $error['headers'] = $response->getHeaders();
-                    }
-
-                    $return[] = $error;
-                    $completeSuccess = false;
-                } else {
-                    $return[] = array(
-                        'success' => true,
-                    );
-                }
+                $return['success'] = $result['state'] === 'rejected';
             }
         }
 
         // reset queue
         $this->notifications = null;
 
-        return $completeSuccess ? true : $return;
+        return $return;
     }
 
     private function prepare(array $notifications)
